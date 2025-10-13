@@ -1,8 +1,7 @@
 use anyhow::Result;
-use opentelemetry::sdk::trace as sdktrace;
-use opentelemetry::sdk::Resource;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{resource::Resource, trace as sdktrace};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
