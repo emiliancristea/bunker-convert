@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
@@ -7,14 +8,18 @@ use bunker_convert::lockfile::generate_lock;
 use bunker_convert::observability::log_snapshot;
 #[cfg(feature = "metrics-server")]
 use bunker_convert::observability::server::MetricsServer;
-use bunker_convert::pipeline::{StageRegistry, build_pipeline};
+use bunker_convert::pipeline::{
+    OutputSpec, StageParameters, StageRegistry, StageSpec, build_pipeline,
+};
 use bunker_convert::presets::generate_preset;
-use bunker_convert::recipe::Recipe;
+use bunker_convert::recipe::{QualityGateSpec, Recipe};
 use bunker_convert::scheduler::DevicePolicy;
 use bunker_convert::security::{compute_sha256, generate_sbom, write_sha256};
 use bunker_convert::stages;
 use bunker_convert::validation::validate_recipe;
-use clap::{Parser, Subcommand};
+use clap::error::ErrorKind;
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use serde_json::Value;
 use serde_json::to_writer_pretty;
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, prelude::*};
@@ -30,44 +35,60 @@ use std::net::SocketAddr;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let otlp_endpoint_for_tracing = match &cli.command {
+    if cli.command.is_some() && (cli.quick_input.is_some() || cli.quick_format.is_some()) {
+        Cli::command()
+            .error(
+                ErrorKind::ArgumentConflict,
+                "Positional input/format arguments cannot be combined with subcommands",
+            )
+            .exit();
+    }
+    let otlp_endpoint_for_tracing = cli.command.as_ref().and_then(|command| match command {
         Commands::Run { otlp_endpoint, .. } => otlp_endpoint.clone(),
         _ => None,
-    };
+    });
 
     configure_tracing(otlp_endpoint_for_tracing.as_deref())?;
 
-    let command_result: Result<()> = match cli.command {
-        Commands::Run {
-            recipe,
-            dry_run,
-            print_metrics,
-            metrics_json,
-            metrics_prometheus,
-            metrics_listen,
-            otlp_endpoint,
-            device_policy,
-        } => {
-            let _ = otlp_endpoint; // already handled in tracing configuration
-            run_recipe(
+    let command_result: Result<()> = if let Some(command) = cli.command {
+        match command {
+            Commands::Run {
                 recipe,
                 dry_run,
                 print_metrics,
                 metrics_json,
                 metrics_prometheus,
                 metrics_listen,
+                otlp_endpoint,
                 device_policy,
-            )
+            } => {
+                let _ = otlp_endpoint; // already handled in tracing configuration
+                run_recipe(
+                    recipe,
+                    dry_run,
+                    print_metrics,
+                    metrics_json,
+                    metrics_prometheus,
+                    metrics_listen,
+                    device_policy,
+                )
+            }
+            Commands::ListStages => {
+                list_stages();
+                Ok(())
+            }
+            Commands::Validate { recipe } => validate_recipe_cmd(recipe),
+            Commands::Lock { recipe, output } => lock_recipe(recipe, output),
+            Commands::Recipe { action } => recipe_command(action),
+            Commands::Bench { action } => bench_command(action),
+            Commands::Security { action } => security_command(action),
         }
-        Commands::ListStages => {
-            list_stages();
-            Ok(())
-        }
-        Commands::Validate { recipe } => validate_recipe_cmd(recipe),
-        Commands::Lock { recipe, output } => lock_recipe(recipe, output),
-        Commands::Recipe { action } => recipe_command(action),
-        Commands::Bench { action } => bench_command(action),
-        Commands::Security { action } => security_command(action),
+    } else if let (Some(input), Some(format)) = (cli.quick_input, cli.quick_format) {
+        quick_convert(input, format)
+    } else {
+        Cli::command().print_help()?;
+        println!();
+        Ok(())
     };
 
     #[cfg(feature = "otel")]
@@ -234,6 +255,60 @@ fn run_recipe(
     #[cfg(feature = "metrics-server")]
     if let Some(mut server) = metrics_server {
         server.stop();
+    }
+
+    Ok(())
+}
+
+fn quick_convert(input: PathBuf, target_format: String) -> Result<()> {
+    if !input.exists() {
+        bail!("Input file '{}' not found", input.display());
+    }
+
+    let normalized_format = target_format.trim().trim_start_matches('.').to_lowercase();
+    if normalized_format.is_empty() {
+        bail!("Output format must be a non-empty value");
+    }
+
+    let mut stages = Vec::with_capacity(2);
+    stages.push(StageSpec {
+        stage: "decode".to_string(),
+        params: None,
+    });
+
+    let mut encode_params = StageParameters::new();
+    encode_params.insert(
+        "format".to_string(),
+        Value::String(normalized_format.clone()),
+    );
+    stages.push(StageSpec {
+        stage: "encode".to_string(),
+        params: Some(encode_params),
+    });
+
+    let registry = build_registry();
+    let output_spec = OutputSpec {
+        directory: env::current_dir().context("Failed to determine current directory")?,
+        structure: format!("{{stem}}.{}", normalized_format),
+    };
+
+    let executor = build_pipeline(
+        &registry,
+        &stages,
+        output_spec,
+        Vec::<QualityGateSpec>::new(),
+        DevicePolicy::Auto,
+    )?;
+
+    let inputs = vec![input];
+    let results = executor.execute(&inputs)?;
+
+    for result in results {
+        info!(
+            input = %result.input.display(),
+            output = %result.output.display(),
+            "Conversion completed"
+        );
     }
 
     Ok(())
@@ -602,7 +677,19 @@ fn build_registry() -> StageRegistry {
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
+    #[arg(
+        value_name = "INPUT",
+        help = "Input file to convert when no subcommand is provided",
+        value_hint = ValueHint::FilePath
+    )]
+    quick_input: Option<PathBuf>,
+    #[arg(
+        value_name = "FORMAT",
+        help = "Target output format (e.g. webp, png, jpeg)",
+        requires = "quick_input"
+    )]
+    quick_format: Option<String>,
 }
 
 #[derive(Subcommand)]
