@@ -105,6 +105,12 @@ pub struct StageRegistry {
     factories: HashMap<String, StageConstructor>,
 }
 
+impl Default for StageRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StageRegistry {
     pub fn new() -> Self {
         Self {
@@ -217,7 +223,7 @@ impl PipelineExecutor {
                 .metadata
                 .get("output_path")
                 .and_then(|v| v.as_str())
-                .map(|s| PathBuf::from(s))
+                .map(PathBuf::from)
                 .unwrap_or_else(|| self.ctx.output.directory.join(&artifact.stem));
             results.push(PipelineResult {
                 input: input.clone(),
@@ -269,38 +275,38 @@ impl PipelineExecutor {
         let mut failure: Option<String> = None;
 
         for gate in &self.quality_gates {
-            if let Some(min_ssim) = gate.min_ssim {
-                if metrics.ssim < min_ssim {
-                    failure = Some(format!(
-                        "Quality gate '{}' failed: SSIM {:.5} < {:.5}",
-                        gate.label.as_deref().unwrap_or("ssim"),
-                        metrics.ssim,
-                        min_ssim
-                    ));
-                    break;
-                }
+            if let Some(min_ssim) = gate.min_ssim
+                && metrics.ssim < min_ssim
+            {
+                failure = Some(format!(
+                    "Quality gate '{}' failed: SSIM {:.5} < {:.5}",
+                    gate.label.as_deref().unwrap_or("ssim"),
+                    metrics.ssim,
+                    min_ssim
+                ));
+                break;
             }
-            if let Some(min_psnr) = gate.min_psnr {
-                if metrics.psnr < min_psnr {
-                    failure = Some(format!(
-                        "Quality gate '{}' failed: PSNR {:.2} < {:.2}",
-                        gate.label.as_deref().unwrap_or("psnr"),
-                        metrics.psnr,
-                        min_psnr
-                    ));
-                    break;
-                }
+            if let Some(min_psnr) = gate.min_psnr
+                && metrics.psnr < min_psnr
+            {
+                failure = Some(format!(
+                    "Quality gate '{}' failed: PSNR {:.2} < {:.2}",
+                    gate.label.as_deref().unwrap_or("psnr"),
+                    metrics.psnr,
+                    min_psnr
+                ));
+                break;
             }
-            if let Some(max_mse) = gate.max_mse {
-                if metrics.mse > max_mse {
-                    failure = Some(format!(
-                        "Quality gate '{}' failed: MSE {:.4} > {:.4}",
-                        gate.label.as_deref().unwrap_or("mse"),
-                        metrics.mse,
-                        max_mse
-                    ));
-                    break;
-                }
+            if let Some(max_mse) = gate.max_mse
+                && metrics.mse > max_mse
+            {
+                failure = Some(format!(
+                    "Quality gate '{}' failed: MSE {:.4} > {:.4}",
+                    gate.label.as_deref().unwrap_or("mse"),
+                    metrics.mse,
+                    max_mse
+                ));
+                break;
             }
         }
 

@@ -58,7 +58,7 @@ fn pipeline_executes_and_writes_output() {
         DevicePolicy::CpuOnly,
     )
     .unwrap();
-    let results = executor.execute(&[input_path.clone()]).unwrap();
+    let results = executor.execute(std::slice::from_ref(&input_path)).unwrap();
 
     assert_eq!(results.len(), 1);
     let result = &results[0];

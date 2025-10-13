@@ -106,12 +106,11 @@ fn write_sbom(metadata: &Metadata, output: &Path) -> Result<()> {
         components,
     };
 
-    if let Some(parent) = output.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).with_context(|| {
-                format!("Failed to create SBOM directory: {}", parent.display())
-            })?;
-        }
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create SBOM directory: {}", parent.display()))?;
     }
 
     let file = File::create(output)
@@ -144,12 +143,11 @@ pub fn compute_sha256(path: &Path) -> Result<String> {
 /// Write the SHA256 digest of `path` into the `output` file.
 pub fn write_sha256(path: &Path, output: &Path) -> Result<String> {
     let digest = compute_sha256(path)?;
-    if let Some(parent) = output.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).with_context(|| {
-                format!("Failed to create digest directory: {}", parent.display())
-            })?;
-        }
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create digest directory: {}", parent.display()))?;
     }
     let mut file = File::create(output)
         .with_context(|| format!("Failed to create digest file: {}", output.display()))?;
