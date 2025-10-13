@@ -1,0 +1,11 @@
+version: 1
+inputs:
+  - path: "C:/Users/emili/Downloads/royal-site.jpeg"
+pipeline:
+  - stage: decode
+  - stage: encode
+    params:
+      format: webp
+output:
+  directory: ./out
+  structure: "{stem}.webp"

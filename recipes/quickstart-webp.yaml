@@ -1,0 +1,21 @@
+version: 1
+inputs:
+  - path: "examples/quickstart/input/*.png"
+pipeline:
+  - stage: decode
+  - stage: resize
+    params:
+      width: 256
+      height: 256
+      method: lanczos3
+  - stage: encode
+    params:
+      format: webp
+      lossless: false
+      quality: 85
+output:
+  directory: "out/quickstart-webp"
+  structure: "{stem}.webp"
+quality_gates:
+  - min_ssim: 0.94
+    min_psnr: 30
