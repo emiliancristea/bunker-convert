@@ -26,7 +26,7 @@ fn quick_convert_produces_output_in_current_directory() {
     Command::cargo_bin("bunker-convert")
         .expect("binary present")
         .current_dir(temp.path())
-        .args([input_arg, "webp"])
+        .args([input_arg, "to", "webp"])
         .assert()
         .success();
 

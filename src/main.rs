@@ -35,22 +35,28 @@ use std::net::SocketAddr;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    if cli.command.is_some() && (cli.quick_input.is_some() || cli.quick_format.is_some()) {
+    let Cli {
+        command,
+        quick_args,
+    } = cli;
+
+    if command.is_some() && !quick_args.is_empty() {
         Cli::command()
             .error(
                 ErrorKind::ArgumentConflict,
-                "Positional input/format arguments cannot be combined with subcommands",
+                "Quick convert arguments cannot be combined with subcommands",
             )
             .exit();
     }
-    let otlp_endpoint_for_tracing = cli.command.as_ref().and_then(|command| match command {
+
+    let otlp_endpoint_for_tracing = command.as_ref().and_then(|command| match command {
         Commands::Run { otlp_endpoint, .. } => otlp_endpoint.clone(),
         _ => None,
     });
 
     configure_tracing(otlp_endpoint_for_tracing.as_deref())?;
 
-    let command_result: Result<()> = if let Some(command) = cli.command {
+    let command_result: Result<()> = if let Some(command) = command {
         match command {
             Commands::Run {
                 recipe,
@@ -83,12 +89,12 @@ fn main() -> Result<()> {
             Commands::Bench { action } => bench_command(action),
             Commands::Security { action } => security_command(action),
         }
-    } else if let (Some(input), Some(format)) = (cli.quick_input, cli.quick_format) {
-        quick_convert(input, format)
-    } else {
+    } else if quick_args.is_empty() {
         Cli::command().print_help()?;
         println!();
         Ok(())
+    } else {
+        quick_convert_from_args(quick_args)
     };
 
     #[cfg(feature = "otel")]
@@ -258,6 +264,16 @@ fn run_recipe(
     }
 
     Ok(())
+}
+
+fn quick_convert_from_args(args: Vec<String>) -> Result<()> {
+    match args.len() {
+        2 => quick_convert(PathBuf::from(&args[0]), args[1].clone()),
+        3 if args[1].eq_ignore_ascii_case("to") => {
+            quick_convert(PathBuf::from(&args[0]), args[2].clone())
+        }
+        _ => bail!("Quick convert usage: bunker-convert <input> to <format>"),
+    }
 }
 
 fn quick_convert(input: PathBuf, target_format: String) -> Result<()> {
@@ -680,16 +696,11 @@ struct Cli {
     command: Option<Commands>,
     #[arg(
         value_name = "INPUT",
-        help = "Input file to convert when no subcommand is provided",
-        value_hint = ValueHint::FilePath
+        help = "Quick convert syntax: <INPUT> to <FORMAT>",
+        value_hint = ValueHint::Other,
+        num_args = 0..
     )]
-    quick_input: Option<PathBuf>,
-    #[arg(
-        value_name = "FORMAT",
-        help = "Target output format (e.g. webp, png, jpeg)",
-        requires = "quick_input"
-    )]
-    quick_format: Option<String>,
+    quick_args: Vec<String>,
 }
 
 #[derive(Subcommand)]
