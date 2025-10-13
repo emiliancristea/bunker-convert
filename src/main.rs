@@ -37,7 +37,7 @@ fn main() -> Result<()> {
 
     configure_tracing(otlp_endpoint_for_tracing.as_deref())?;
 
-    let result = match cli.command {
+    let command_result: Result<()> = match cli.command {
         Commands::Run {
             recipe,
             dry_run,
@@ -57,32 +57,17 @@ fn main() -> Result<()> {
                 metrics_prometheus,
                 metrics_listen,
                 device_policy,
-            )?
+            )
         }
         Commands::ListStages => {
             list_stages();
-            ()
+            Ok(())
         }
-        Commands::Validate { recipe } => {
-            validate_recipe_cmd(recipe)?;
-            ()
-        }
-        Commands::Lock { recipe, output } => {
-            lock_recipe(recipe, output)?;
-            ()
-        }
-        Commands::Recipe { action } => {
-            recipe_command(action)?;
-            ()
-        }
-        Commands::Bench { action } => {
-            bench_command(action)?;
-            ()
-        }
-        Commands::Security { action } => {
-            security_command(action)?;
-            ()
-        }
+        Commands::Validate { recipe } => validate_recipe_cmd(recipe),
+        Commands::Lock { recipe, output } => lock_recipe(recipe, output),
+        Commands::Recipe { action } => recipe_command(action),
+        Commands::Bench { action } => bench_command(action),
+        Commands::Security { action } => security_command(action),
     };
 
     #[cfg(feature = "otel")]
@@ -90,7 +75,7 @@ fn main() -> Result<()> {
         opentelemetry::global::shutdown_tracer_provider();
     }
 
-    Ok(result)
+    command_result
 }
 
 fn configure_tracing(otlp_endpoint: Option<&str>) -> Result<()> {
@@ -217,12 +202,12 @@ fn run_recipe(
             log_snapshot(&snapshot);
         }
         if let Some(path) = metrics_json {
-            if let Some(parent) = path.parent() {
-                if !parent.as_os_str().is_empty() {
-                    std::fs::create_dir_all(parent).with_context(|| {
-                        format!("Failed to create metrics directory: {}", parent.display())
-                    })?;
-                }
+            if let Some(parent) = path.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent).with_context(|| {
+                    format!("Failed to create metrics directory: {}", parent.display())
+                })?;
             }
             let file = File::create(&path)
                 .with_context(|| format!("Failed to create metrics file: {}", path.display()))?;
@@ -231,12 +216,12 @@ fn run_recipe(
             info!(metrics = %path.display(), "Metrics JSON written");
         }
         if let Some(path) = metrics_prometheus {
-            if let Some(parent) = path.parent() {
-                if !parent.as_os_str().is_empty() {
-                    std::fs::create_dir_all(parent).with_context(|| {
-                        format!("Failed to create metrics directory: {}", parent.display())
-                    })?;
-                }
+            if let Some(parent) = path.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent).with_context(|| {
+                    format!("Failed to create metrics directory: {}", parent.display())
+                })?;
             }
             let content = snapshot.to_prometheus();
             std::fs::write(&path, content).with_context(|| {
@@ -304,12 +289,12 @@ fn lock_recipe(recipe_path: PathBuf, output_path: PathBuf) -> Result<()> {
         ));
     }
 
-    if let Some(parent) = output_path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).with_context(|| {
-                format!("Failed to create lockfile directory: {}", parent.display())
-            })?;
-        }
+    if let Some(parent) = output_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!("Failed to create lockfile directory: {}", parent.display())
+        })?;
     }
 
     generate_lock(&recipe, &output_path)?;
@@ -386,12 +371,12 @@ fn bench_command(command: BenchCommands) -> Result<()> {
             }
 
             if let Some(path) = report {
-                if let Some(parent) = path.parent() {
-                    if !parent.as_os_str().is_empty() {
-                        fs::create_dir_all(parent).with_context(|| {
-                            format!("Failed to create report directory: {}", parent.display())
-                        })?;
-                    }
+                if let Some(parent) = path.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    fs::create_dir_all(parent).with_context(|| {
+                        format!("Failed to create report directory: {}", parent.display())
+                    })?;
                 }
                 let file = File::create(&path)
                     .with_context(|| format!("Failed to create report file: {}", path.display()))?;

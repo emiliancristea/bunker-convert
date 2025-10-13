@@ -1,18 +1,13 @@
 use clap::ValueEnum;
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Deserialize, ValueEnum)]
+#[derive(Debug, Clone, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum DevicePolicy {
+    #[default]
     Auto,
     CpuOnly,
     GpuPreferred,
-}
-
-impl Default for DevicePolicy {
-    fn default() -> Self {
-        DevicePolicy::Auto
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

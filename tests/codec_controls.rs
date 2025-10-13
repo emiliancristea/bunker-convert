@@ -68,7 +68,7 @@ fn encode_jpeg_with_quality_metadata() {
         DevicePolicy::CpuOnly,
     )
     .unwrap();
-    let results = executor.execute(&[input_path.clone()]).unwrap();
+    let results = executor.execute(std::slice::from_ref(&input_path)).unwrap();
     let metadata = &results[0].metadata;
     assert_eq!(
         metadata.get("output.extension").and_then(Value::as_str),
@@ -113,7 +113,7 @@ fn encode_avif_records_speed_and_colorspace() {
         DevicePolicy::CpuOnly,
     )
     .unwrap();
-    let results = executor.execute(&[input_path.clone()]).unwrap();
+    let results = executor.execute(std::slice::from_ref(&input_path)).unwrap();
     let metadata = &results[0].metadata;
     assert_eq!(
         metadata.get("output.extension").and_then(Value::as_str),
@@ -162,7 +162,7 @@ fn encode_webp_respects_lossless_flag() {
         DevicePolicy::CpuOnly,
     )
     .unwrap();
-    let results = executor.execute(&[input_path.clone()]).unwrap();
+    let results = executor.execute(std::slice::from_ref(&input_path)).unwrap();
     let metadata = &results[0].metadata;
     assert_eq!(
         metadata.get("output.extension").and_then(Value::as_str),
@@ -207,7 +207,7 @@ fn encode_png_records_filter_and_compression() {
         DevicePolicy::CpuOnly,
     )
     .unwrap();
-    let results = executor.execute(&[input_path.clone()]).unwrap();
+    let results = executor.execute(std::slice::from_ref(&input_path)).unwrap();
     let metadata = &results[0].metadata;
     assert_eq!(
         metadata.get("output.extension").and_then(Value::as_str),

@@ -42,11 +42,11 @@ pub fn generate_preset(name: &str, destination: &Path) -> Result<PathBuf> {
     };
 
     let rendered = serde_yaml::to_string(&preset)?;
-    if let Some(parent) = destination.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
-        }
+    if let Some(parent) = destination.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
     }
     fs::write(destination, rendered)
         .with_context(|| format!("Failed to write preset recipe: {}", destination.display()))?;

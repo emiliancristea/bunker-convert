@@ -621,9 +621,9 @@ fn value_as_bool(value: &Value) -> Option<bool> {
 }
 
 fn take_string(params: &mut StageParameters, key: &str) -> Option<String> {
-    params.remove(key).and_then(|value| match value {
-        Value::String(s) => Some(s),
-        other => Some(other.to_string()),
+    params.remove(key).map(|value| match value {
+        Value::String(s) => s,
+        other => other.to_string(),
     })
 }
 
@@ -672,17 +672,17 @@ fn map_filter(value: String) -> Option<ResizeFilter> {
     }
 }
 
-fn infer_format<'a>(hint: Option<&'a str>, artifact: &Artifact) -> Result<(ImageFormat, String)> {
-    if let Some(hint) = hint {
-        if let Some(fmt) = format_from_label(hint) {
-            return Ok((fmt, format_extension(fmt).to_string()));
-        }
+fn infer_format(hint: Option<&str>, artifact: &Artifact) -> Result<(ImageFormat, String)> {
+    if let Some(hint) = hint
+        && let Some(fmt) = format_from_label(hint)
+    {
+        return Ok((fmt, format_extension(fmt).to_string()));
     }
 
-    if let Some(existing) = artifact.format.as_deref() {
-        if let Some(fmt) = format_from_label(existing) {
-            return Ok((fmt, format_extension(fmt).to_string()));
-        }
+    if let Some(existing) = artifact.format.as_deref()
+        && let Some(fmt) = format_from_label(existing)
+    {
+        return Ok((fmt, format_extension(fmt).to_string()));
     }
 
     if let Some(ext) = artifact
