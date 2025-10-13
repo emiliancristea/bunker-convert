@@ -22,7 +22,9 @@ use tracing_subscriber::{EnvFilter, prelude::*};
 #[cfg(feature = "otel")]
 use opentelemetry::KeyValue;
 #[cfg(feature = "otel")]
-use opentelemetry::sdk::{Resource, trace as sdktrace};
+use opentelemetry_otlp::WithExportConfig;
+#[cfg(feature = "otel")]
+use opentelemetry_sdk::{resource::Resource, trace as sdktrace};
 #[cfg(feature = "metrics-server")]
 use std::net::SocketAddr;
 
@@ -93,11 +95,9 @@ fn main() -> Result<()> {
 
 fn configure_tracing(otlp_endpoint: Option<&str>) -> Result<()> {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let fmt_layer = tracing_subscriber::fmt::layer();
 
     #[cfg(feature = "otel")]
-    let subscriber = {
-        let registry = tracing_subscriber::registry().with(filter).with(fmt_layer);
+    {
         if let Some(endpoint) = otlp_endpoint {
             let tracer =
                 opentelemetry_otlp::new_pipeline()
@@ -111,26 +111,37 @@ fn configure_tracing(otlp_endpoint: Option<&str>) -> Result<()> {
                             .with_endpoint(endpoint),
                     )
                     .install_simple()?;
-            registry.with(tracing_opentelemetry::layer().with_tracer(tracer))
+
+            tracing_subscriber::registry()
+                .with(filter.clone())
+                .with(tracing_subscriber::fmt::layer())
+                .with(tracing_opentelemetry::layer().with_tracer(tracer))
+                .try_init()
+                .map_err(|err| anyhow!(err.to_string()))?;
         } else {
-            registry
+            tracing_subscriber::registry()
+                .with(filter.clone())
+                .with(tracing_subscriber::fmt::layer())
+                .try_init()
+                .map_err(|err| anyhow!(err.to_string()))?;
         }
-    };
+    }
 
     #[cfg(not(feature = "otel"))]
-    let subscriber = {
+    {
         if let Some(endpoint) = otlp_endpoint {
             eprintln!(
                 "warning: --otlp-endpoint '{}' requested but OpenTelemetry support is not enabled. Rebuild with --features otel.",
                 endpoint
             );
         }
-        tracing_subscriber::registry().with(filter).with(fmt_layer)
-    };
 
-    subscriber
-        .try_init()
-        .map_err(|err| anyhow!(err.to_string()))?;
+        tracing_subscriber::registry()
+            .with(filter.clone())
+            .with(tracing_subscriber::fmt::layer())
+            .try_init()
+            .map_err(|err| anyhow!(err.to_string()))?;
+    }
 
     Ok(())
 }
@@ -173,7 +184,7 @@ fn run_recipe(
     let metrics_handle = executor.metrics();
 
     #[cfg(feature = "metrics-server")]
-    let mut metrics_server = if let Some(addr_str) = metrics_listen {
+    let metrics_server = if let Some(addr_str) = metrics_listen {
         let addr: SocketAddr = addr_str
             .parse()
             .with_context(|| format!("Invalid metrics listen address: {addr_str}"))?;
