@@ -1,5 +1,6 @@
 use std::env;
 use std::fs::{self, File};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -9,7 +10,7 @@ use bunker_convert::observability::log_snapshot;
 #[cfg(feature = "metrics-server")]
 use bunker_convert::observability::server::MetricsServer;
 use bunker_convert::pipeline::{
-    OutputSpec, StageParameters, StageRegistry, StageSpec, build_pipeline,
+    OutputSpec, StageParameters, StageProgress, StageRegistry, StageSpec, build_pipeline,
 };
 use bunker_convert::presets::generate_preset;
 use bunker_convert::recipe::{QualityGateSpec, Recipe};
@@ -267,18 +268,76 @@ fn run_recipe(
 }
 
 fn quick_convert_from_args(args: Vec<String>) -> Result<()> {
-    match args.len() {
-        2 => quick_convert(PathBuf::from(&args[0]), args[1].clone()),
-        3 if args[1].eq_ignore_ascii_case("to") => {
-            quick_convert(PathBuf::from(&args[0]), args[2].clone())
-        }
-        _ => bail!("Quick convert usage: bunker-convert <input> to <format>"),
+    if args.is_empty() {
+        bail!("Quick convert usage: bunker-convert <input> to <format> [to <output_dir>]");
     }
+
+    let to_positions: Vec<usize> = args
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, arg)| arg.eq_ignore_ascii_case("to").then_some(idx))
+        .collect();
+
+    let (input_tokens, format_token, output_token) = if to_positions.is_empty() {
+        if args.len() < 2 {
+            bail!("Quick convert usage: bunker-convert <input> to <format> [to <output_dir>]");
+        }
+        let (inputs, format) = args.split_at(args.len() - 1);
+        (inputs.to_vec(), format[0].clone(), None)
+    } else {
+        let first_to = to_positions[0];
+        if first_to == 0 {
+            bail!("Quick convert usage: bunker-convert <input> to <format> [to <output_dir>]");
+        }
+        let last_to = *to_positions.last().unwrap();
+        if first_to == last_to {
+            let format_slice = &args[first_to + 1..];
+            if format_slice.len() != 1 {
+                bail!("Quick convert usage: bunker-convert <input> to <format> [to <output_dir>]");
+            }
+            (args[..first_to].to_vec(), format_slice[0].clone(), None)
+        } else {
+            let format_slice = &args[first_to + 1..last_to];
+            if format_slice.len() != 1 {
+                bail!("Quick convert usage: bunker-convert <input> to <format> [to <output_dir>]");
+            }
+            let output_slice = &args[last_to + 1..];
+            if output_slice.is_empty() {
+                bail!("Output directory must follow the final 'to'");
+            }
+            if output_slice.len() > 1 {
+                bail!("Output directory must be a single argument. Quote paths containing spaces.");
+            }
+            (
+                args[..first_to].to_vec(),
+                format_slice[0].clone(),
+                Some(output_slice[0].clone()),
+            )
+        }
+    };
+
+    if input_tokens.is_empty() {
+        bail!("At least one input file must be specified");
+    }
+
+    let inputs: Vec<PathBuf> = input_tokens.into_iter().map(PathBuf::from).collect();
+    let output_dir = output_token.map(PathBuf::from);
+    quick_convert(inputs, format_token, output_dir)
 }
 
-fn quick_convert(input: PathBuf, target_format: String) -> Result<()> {
-    if !input.exists() {
-        bail!("Input file '{}' not found", input.display());
+fn quick_convert(
+    inputs: Vec<PathBuf>,
+    target_format: String,
+    output_dir: Option<PathBuf>,
+) -> Result<()> {
+    if inputs.is_empty() {
+        bail!("At least one input file is required");
+    }
+
+    for input in &inputs {
+        if !input.exists() {
+            bail!("Input file '{}' not found", input.display());
+        }
     }
 
     let normalized_format = target_format.trim().trim_start_matches('.').to_lowercase();
@@ -303,8 +362,35 @@ fn quick_convert(input: PathBuf, target_format: String) -> Result<()> {
     });
 
     let registry = build_registry();
+
+    let mut directory = if let Some(dir) = output_dir {
+        if dir.is_absolute() {
+            dir
+        } else {
+            env::current_dir()
+                .context("Failed to determine current directory")?
+                .join(dir)
+        }
+    } else {
+        env::current_dir().context("Failed to determine current directory")?
+    };
+
+    if directory.exists() {
+        if !directory.is_dir() {
+            bail!("Output path '{}' is not a directory", directory.display());
+        }
+    } else {
+        fs::create_dir_all(&directory).with_context(|| {
+            format!("Failed to create output directory: {}", directory.display())
+        })?;
+    }
+
+    if let Ok(canonical) = directory.canonicalize() {
+        directory = canonical;
+    }
+
     let output_spec = OutputSpec {
-        directory: env::current_dir().context("Failed to determine current directory")?,
+        directory,
         structure: format!("{{stem}}.{}", normalized_format),
     };
 
@@ -316,16 +402,51 @@ fn quick_convert(input: PathBuf, target_format: String) -> Result<()> {
         DevicePolicy::Auto,
     )?;
 
-    let inputs = vec![input];
-    let results = executor.execute(&inputs)?;
+    let total_inputs = inputs.len();
+    let bar_width = 30usize;
 
-    for result in results {
-        info!(
-            input = %result.input.display(),
-            output = %result.output.display(),
-            "Conversion completed"
+    let progress_render = move |progress: StageProgress<'_>| {
+        let current_input = progress.input_index + 1;
+        let total_inputs = progress.total_inputs.max(1);
+        let total_stages = progress.total_stages.max(1);
+        let total_steps = total_inputs * total_stages;
+        let completed_steps = progress
+            .input_index
+            .saturating_mul(total_stages)
+            .saturating_add(progress.stage_index);
+        let fraction = (completed_steps as f64 / total_steps as f64).clamp(0.0, 1.0);
+        let filled =
+            ((fraction * bar_width as f64).round() as isize).clamp(0, bar_width as isize) as usize;
+        let empty = bar_width.saturating_sub(filled);
+        let percent = (fraction * 100.0).round().clamp(0.0, 100.0) as i32;
+        let mut stage_label = progress.stage_name.to_string();
+        if stage_label.len() > 12 {
+            stage_label.truncate(12);
+        }
+        print!(
+            "\r{:>3}/{:<3} [{}{}] {:>3}% {:<12}",
+            current_input,
+            total_inputs,
+            "=".repeat(filled),
+            " ".repeat(empty),
+            percent,
+            stage_label
+        );
+        let _ = io::stdout().flush();
+    };
+
+    let results = executor.execute_with_progress(&inputs, progress_render)?;
+
+    if results.len() != total_inputs {
+        bail!(
+            "Expected {} output(s) but produced {}",
+            total_inputs,
+            results.len()
         );
     }
+
+    println!();
+    println!("\x1b[32mConversion completed\x1b[0m");
 
     Ok(())
 }

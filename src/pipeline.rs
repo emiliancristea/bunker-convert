@@ -151,6 +151,16 @@ pub struct PipelineExecutor {
     scheduler: TaskScheduler,
 }
 
+#[derive(Debug, Clone)]
+pub struct StageProgress<'a> {
+    pub input: &'a Path,
+    pub input_index: usize,
+    pub total_inputs: usize,
+    pub stage_index: usize,
+    pub total_stages: usize,
+    pub stage_name: &'static str,
+}
+
 impl PipelineExecutor {
     pub fn new(
         stages: Vec<Box<dyn Stage>>,
@@ -167,9 +177,17 @@ impl PipelineExecutor {
         }
     }
 
-    #[instrument(skip(self, artifact))]
-    pub fn process(&self, artifact: &mut Artifact) -> Result<()> {
-        for stage in &self.stages {
+    #[instrument(skip(self, artifact, progress))]
+    pub fn process(
+        &self,
+        artifact: &mut Artifact,
+        input: &Path,
+        input_index: usize,
+        total_inputs: usize,
+        mut progress: Option<&mut dyn FnMut(StageProgress<'_>)>,
+    ) -> Result<()> {
+        let total_stages = self.stages.len();
+        for (index, stage) in self.stages.iter().enumerate() {
             let span = tracing::span!(tracing::Level::DEBUG, "stage", stage = stage.name());
             let _span_guard = span.enter();
             let _timer = self.metrics.start_stage(stage.name());
@@ -194,20 +212,63 @@ impl PipelineExecutor {
             };
             tracing::debug!(?requested, ?device, "Dispatching stage");
             stage.run(artifact, &self.ctx, device)?;
+            if let Some(callback) = progress.as_deref_mut() {
+                callback(StageProgress {
+                    input,
+                    input_index,
+                    total_inputs,
+                    stage_index: index + 1,
+                    total_stages,
+                    stage_name: stage.name(),
+                });
+            }
         }
         Ok(())
     }
 
     pub fn execute(&self, inputs: &[PathBuf]) -> Result<Vec<PipelineResult>> {
+        self.execute_with_optional_progress(inputs, None)
+    }
+
+    pub fn execute_with_progress<F>(
+        &self,
+        inputs: &[PathBuf],
+        mut progress: F,
+    ) -> Result<Vec<PipelineResult>>
+    where
+        F: FnMut(StageProgress<'_>),
+    {
+        self.execute_with_optional_progress(inputs, Some(&mut progress))
+    }
+
+    fn execute_with_optional_progress(
+        &self,
+        inputs: &[PathBuf],
+        progress: Option<&mut dyn FnMut(StageProgress<'_>)>,
+    ) -> Result<Vec<PipelineResult>> {
         self.metrics.reset();
         let total_start = Instant::now();
         let mut results = Vec::new();
-        for input in inputs {
+        let mut progress = progress;
+        for (input_index, input) in inputs.iter().enumerate() {
             let mut artifact = Artifact::load(input)?;
             let artifact_span =
                 tracing::span!(tracing::Level::DEBUG, "artifact", input = %input.display());
             let _artifact_guard = artifact_span.enter();
-            self.process(&mut artifact)?;
+            match progress.as_mut() {
+                Some(callback) => {
+                    self.process(
+                        &mut artifact,
+                        input,
+                        input_index,
+                        inputs.len(),
+                        Some(&mut **callback),
+                    )?;
+                }
+                None => {
+                    self.process(&mut artifact, input, input_index, inputs.len(), None)?;
+                }
+            }
             if let Some(metrics) = self.evaluate_quality_gates(&mut artifact)? {
                 artifact
                     .metadata
