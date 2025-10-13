@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, trunk ]
+  pull_request:
+    branches: [ "**" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Tests (default features)
+        run: cargo test
+      - name: Tests (full feature set)
+        run: cargo test --features full
+
+  package:
+    needs: lint-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Build release binary
+        run: cargo build --release
+      - name: Generate SBOM
+        run: cargo run -- security sbom --output target/bunker-convert-sbom.json
+      - name: Compute binary digest
+        run: cargo run -- security digest --path target/release/bunker-convert --output target/bunker-convert.sha256
+      - name: Archive artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bunker-convert-release
+          path: |
+            target/release/bunker-convert*
+            target/bunker-convert-sbom.json
+            target/bunker-convert.sha256

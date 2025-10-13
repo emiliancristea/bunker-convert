@@ -1,0 +1,22 @@
+version: 1
+inputs:
+  - path: ./examples/input/*.png
+pipeline:
+  - stage: decode
+    params:
+      format: png
+  - stage: annotate
+    params:
+      key: batch
+      value: sample
+  - stage: resize
+    params:
+      width: 1920
+      height: 1080
+      fit: cover
+  - stage: encode
+    params:
+      format: png
+output:
+  directory: ./out
+  structure: "{stem}.{ext}"

@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bunker-convert-sdk"
+version = "0.1.0"
+description = "Thin Python wrapper around the bunker-convert CLI"
+requires-python = ">=3.10"
+dependencies = []

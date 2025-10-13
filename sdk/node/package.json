@@ -1,0 +1,13 @@
+{
+  "name": "@bunkercorp/bunker-convert",
+  "version": "0.0.0",
+  "description": "Thin Node wrapper for the bunker-convert CLI",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "index.js"
+  ]
+}
