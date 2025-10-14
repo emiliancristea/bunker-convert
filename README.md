@@ -13,7 +13,12 @@
 
 ```bash
 # Single file, write result alongside current directory
-bunker-convert input.jpg to webp
+bunker-convert <file_path> to <file_format>
+```
+
+```bash
+# Example, Single file, write result alongside current directory
+bunker-convert "C:\Users\user-name\Pictures\image-test.png" to webp
 ```
 
 ### Why bunker-convert?
