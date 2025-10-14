@@ -11,6 +11,11 @@
 
 **bunker-convert** is a high-performance media transformation tool designed for production pipelines that demand speed, reproducibility, and developer-friendly workflows. Unlike traditional tools like ImageMagick, bunker-convert uses declarative YAML recipes, GPU acceleration, and built-in quality gates to deliver consistent, auditable results at scale.
 
+```bash
+# Single file, write result alongside current directory
+bunker-convert input.jpg to webp
+```
+
 ### Why bunker-convert?
 
 | Feature | ImageMagick convert | bunker-convert |
