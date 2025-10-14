@@ -28,6 +28,25 @@
 - **Creative Automation**: Multi-step workflows with checkpointing and reproducible outputs
 - **Developer Integration**: Embed conversion capabilities with SDK support across Python, Node.js, and PowerShell
 
+### Instant Conversions (no recipe)
+
+Use the streamlined quick-convert interface when you just need to re-encode a handful of files:
+
+```bash
+# Single file, write result alongside current directory
+bunker-convert input.jpg to webp
+
+# Multiple files, send all outputs to a specific folder (created if needed)
+b-convert image1.png image2.png to jpeg to ./converted
+
+# Alias binaries mirror bunker-convert: b-convert, bconvert, bcvrt
+```
+
+- Accepts one or more input paths (globs are supported by your shell)
+- Supports an optional trailing `to <output_dir>` segment
+- Renders a live progress bar showing `current/total` inputs and stage status
+- Produces outputs named after the input stem with the requested extension
+
 ## Features
 
 ✨ **Declarative Recipes** – Human-readable YAML/JSON pipeline definitions with explicit stages
