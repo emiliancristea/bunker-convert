@@ -1,7 +1,7 @@
 # bunker-convert
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/bunkercorporation/bunker-convert)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/bunkercorporation/bunker-convert)
+[![CI](https://github.com/emiliancristea/bunker-convert/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/emiliancristea/bunker-convert/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/emiliancristea/bunker-convert?label=release)](https://github.com/emiliancristea/bunker-convert/releases)
 [![License](https://img.shields.io/badge/license-check_cargo.toml-lightgrey)](./Cargo.toml)
 [![Rust Edition](https://img.shields.io/badge/rust-2024-orange)](https://www.rust-lang.org/)
 
@@ -83,7 +83,7 @@ b-convert image1.png image2.png to jpeg to ./converted
 
 ```bash
 # Clone the repository
-git clone https://github.com/bunkercorporation/bunker-convert.git
+git clone https://github.com/emiliancristea/bunker-convert.git
 cd bunker-convert
 
 # Build with default features
@@ -105,7 +105,7 @@ cargo install --path .
 
 ### Binary Releases
 
-Pre-built binaries for Linux, macOS, and Windows will be available in [GitHub Releases](https://github.com/bunkercorporation/bunker-convert/releases).
+Pre-built binaries for Linux, macOS, and Windows will be available in [GitHub Releases](https://github.com/emiliancristea/bunker-convert/releases).
 
 ### SDK Installation
 
@@ -529,7 +529,7 @@ We welcome contributions! Here's how to get started:
 
 ```bash
 # Clone the repository
-git clone https://github.com/bunkercorporation/bunker-convert.git
+git clone https://github.com/emiliancristea/bunker-convert.git
 cd bunker-convert
 
 # Build the project
@@ -630,5 +630,5 @@ Built with the following open-source libraries:
 
 ---
 
-**bunker-convert** is developed by [Bunker Corporation](https://github.com/bunkercorporation)
+**bunker-convert** is maintained by [Emilian Cristea](https://github.com/emiliancristea)
 
