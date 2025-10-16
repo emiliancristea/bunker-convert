@@ -1,3 +1,5 @@
+mod video;
+
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -32,6 +34,12 @@ pub fn register_defaults(registry: &mut StageRegistry) {
     });
     registry.register("encode", |params| {
         Ok(Box::new(EncodeStage::from_params(params)?))
+    });
+    registry.register("video_decode", |params| {
+        Ok(Box::new(video::VideoDecodeStage::from_params(params)?))
+    });
+    registry.register("video_encode", |params| {
+        Ok(Box::new(video::VideoEncodeStage::from_params(params)?))
     });
 }
 

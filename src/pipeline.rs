@@ -14,6 +14,7 @@ use crate::observability::MetricsCollector;
 use crate::quality::{QualityMetrics, compute_metrics};
 use crate::recipe::QualityGateSpec;
 use crate::scheduler::{DevicePolicy, StageDevice, TaskScheduler};
+use crate::video::MediaStreams;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OutputSpec {
@@ -34,6 +35,7 @@ pub struct Artifact {
     pub format: Option<String>,
     pub original_image: Option<DynamicImage>,
     pub image: Option<DynamicImage>,
+    pub media: MediaStreams,
     pub metadata: Map<String, Value>,
 }
 
@@ -60,6 +62,7 @@ impl Artifact {
             format: None,
             original_image: None,
             image: None,
+            media: MediaStreams::default(),
             metadata,
         })
     }
@@ -78,6 +81,14 @@ impl Artifact {
 
     pub fn set_original_image(&mut self, image: DynamicImage) {
         self.original_image = Some(image);
+    }
+
+    pub fn media_mut(&mut self) -> &mut MediaStreams {
+        &mut self.media
+    }
+
+    pub fn media(&self) -> &MediaStreams {
+        &self.media
     }
 }
 

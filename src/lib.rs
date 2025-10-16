@@ -9,6 +9,7 @@ pub mod scheduler;
 pub mod security;
 pub mod stages;
 pub mod validation;
+pub mod video;
 
 pub use pipeline::{Artifact, PipelineExecutor, PipelineResult, StageRegistry};
 pub use recipe::Recipe;
