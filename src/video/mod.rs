@@ -6,6 +6,9 @@
 //! audio representations while the heavy lifting codecs are developed in
 //! subsequent milestones.
 
+pub mod container;
+pub mod h264;
+
 use std::time::Duration;
 
 use serde::Serialize;
