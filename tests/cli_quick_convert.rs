@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use image::{ImageBuffer, Rgba};
+use std::io::Write;
 use tempfile::tempdir;
 
 fn write_sample_image(path: &std::path::Path) {
@@ -80,4 +81,31 @@ fn quick_convert_supports_custom_output_directory() {
         .success();
 
     assert!(output_dir.join("image.webp").is_file());
+}
+
+const ANNEX_B_SAMPLE: &[u8] = &[
+    0x00, 0x00, 0x01, 0x67, 0x42, 0xE0, 0x1E, 0x8D, 0x68, 0x50, 0x1E, 0xD8, 0x08, 0x80, 0x00, 0x00,
+    0x01, 0x68, 0xCE, 0x06, 0xE2, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x21, 0xA0,
+];
+
+#[test]
+fn quick_convert_handles_h264_inputs() {
+    let temp = tempdir().unwrap();
+    let input_path = temp.path().join("clip.h264");
+    let mut file = std::fs::File::create(&input_path).unwrap();
+    file.write_all(ANNEX_B_SAMPLE).unwrap();
+
+    let input_arg = input_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .expect("input name");
+
+    Command::cargo_bin("bunker-convert")
+        .expect("binary present")
+        .current_dir(temp.path())
+        .args([input_arg, "to", "mp4"])
+        .assert()
+        .success();
+
+    assert!(temp.path().join("clip.mp4").is_file());
 }

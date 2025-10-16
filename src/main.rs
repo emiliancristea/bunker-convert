@@ -345,21 +345,41 @@ fn quick_convert(
         bail!("Output format must be a non-empty value");
     }
 
-    let mut stages = Vec::with_capacity(2);
-    stages.push(StageSpec {
-        stage: "decode".to_string(),
-        params: None,
-    });
+    let mode = classify_inputs(&inputs)?;
 
-    let mut encode_params = StageParameters::new();
-    encode_params.insert(
-        "format".to_string(),
-        Value::String(normalized_format.clone()),
-    );
-    stages.push(StageSpec {
-        stage: "encode".to_string(),
-        params: Some(encode_params),
-    });
+    let mut stages = Vec::with_capacity(2);
+    match mode {
+        QuickConvertKind::Image => {
+            stages.push(StageSpec {
+                stage: "decode".to_string(),
+                params: None,
+            });
+            let mut encode_params = StageParameters::new();
+            encode_params.insert(
+                "format".to_string(),
+                Value::String(normalized_format.clone()),
+            );
+            stages.push(StageSpec {
+                stage: "encode".to_string(),
+                params: Some(encode_params),
+            });
+        }
+        QuickConvertKind::Video => {
+            stages.push(StageSpec {
+                stage: "video_decode".to_string(),
+                params: None,
+            });
+            let mut encode_params = StageParameters::new();
+            encode_params.insert(
+                "format".to_string(),
+                Value::String(normalized_format.clone()),
+            );
+            stages.push(StageSpec {
+                stage: "video_encode".to_string(),
+                params: Some(encode_params),
+            });
+        }
+    }
 
     let registry = build_registry();
 
@@ -449,6 +469,44 @@ fn quick_convert(
     println!("\x1b[32mConversion completed\x1b[0m");
 
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum QuickConvertKind {
+    Image,
+    Video,
+}
+
+fn classify_inputs(inputs: &[PathBuf]) -> Result<QuickConvertKind> {
+    if inputs.is_empty() {
+        return Ok(QuickConvertKind::Image);
+    }
+
+    let first_is_video = is_video_path(&inputs[0]);
+    for path in inputs.iter().skip(1) {
+        let is_video = is_video_path(path);
+        if is_video != first_is_video {
+            bail!("Mixed image and video inputs are not supported by quick convert");
+        }
+    }
+
+    Ok(if first_is_video {
+        QuickConvertKind::Video
+    } else {
+        QuickConvertKind::Image
+    })
+}
+
+fn is_video_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(is_video_extension)
+        .unwrap_or(false)
+}
+
+fn is_video_extension(ext: &str) -> bool {
+    let normalized = ext.trim_start_matches('.').to_lowercase();
+    matches!(normalized.as_str(), "h264" | "264" | "annexb" | "avc")
 }
 
 fn list_stages() {
