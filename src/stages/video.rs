@@ -1,7 +1,10 @@
-use anyhow::{Context, Result, anyhow, bail};
-use serde_json::json;
+use std::fs;
+use std::path::PathBuf;
 
-use crate::pipeline::{Artifact, PipelineContext, Stage, StageParameters};
+use anyhow::{Context, Result, anyhow};
+use serde_json::{Value, json};
+
+use crate::pipeline::{Artifact, OutputSpec, PipelineContext, Stage, StageParameters};
 use crate::scheduler::StageDevice;
 use crate::video::{self, MediaStreams};
 
@@ -63,12 +66,21 @@ impl Stage for VideoDecodeStage {
     }
 }
 
-/// Placeholder for the upcoming proprietary video encoder stage.
-pub struct VideoEncodeStage;
+pub struct VideoEncodeStage {
+    format: Option<String>,
+    extension: Option<String>,
+    _options: StageParameters,
+}
 
 impl VideoEncodeStage {
-    pub fn from_params(_params: StageParameters) -> Result<Self> {
-        Ok(Self)
+    pub fn from_params(mut params: StageParameters) -> Result<Self> {
+        let format = take_string(&mut params, "format");
+        let extension = take_string(&mut params, "extension");
+        Ok(Self {
+            format,
+            extension,
+            _options: params,
+        })
     }
 }
 
@@ -83,12 +95,80 @@ impl Stage for VideoEncodeStage {
 
     fn run(
         &self,
-        _artifact: &mut Artifact,
-        _ctx: &PipelineContext,
+        artifact: &mut Artifact,
+        ctx: &PipelineContext,
         _device: StageDevice,
     ) -> Result<()> {
-        bail!(
-            "video_encode stage is not implemented yet. This is a placeholder for the upcoming video pipeline"
-        )
+        let video_stream = artifact
+            .media()
+            .video
+            .as_ref()
+            .ok_or_else(|| anyhow!("video_encode requires a decoded video stream"))?;
+
+        let frame_count = video_stream.frames.len();
+
+        let format = self.format.as_deref().unwrap_or("mp4").to_ascii_lowercase();
+        let extension = self
+            .extension
+            .clone()
+            .unwrap_or_else(|| default_extension(&format));
+
+        let output_path = resolve_output_path(&ctx.output, artifact, &extension);
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent).with_context(|| {
+                format!("failed to create output directory: {}", parent.display())
+            })?;
+        }
+
+        let buffer = artifact.data.clone();
+        fs::write(&output_path, &buffer)
+            .with_context(|| format!("failed to write encoded video: {}", output_path.display()))?;
+
+        artifact.replace_data(buffer);
+        artifact.metadata.insert(
+            "video.output_path".into(),
+            Value::String(output_path.to_string_lossy().to_string()),
+        );
+        artifact
+            .metadata
+            .insert("video.output.format".into(), Value::String(format.clone()));
+        artifact
+            .metadata
+            .insert("video.output.size_bytes".into(), json!(artifact.data.len()));
+        artifact
+            .metadata
+            .insert("video.output.frame_count".into(), json!(frame_count));
+        Ok(())
     }
+}
+
+fn resolve_output_path(spec: &OutputSpec, artifact: &Artifact, extension: &str) -> PathBuf {
+    let mut file_name = spec.structure.clone();
+    file_name = file_name.replace("{stem}", &artifact.stem);
+    file_name = file_name.replace("{ext}", extension);
+
+    for (key, value) in artifact.metadata.iter() {
+        if let Some(as_str) = value.as_str() {
+            let placeholder = format!("{{{}}}", key);
+            file_name = file_name.replace(&placeholder, as_str);
+        }
+    }
+
+    let mut path = spec.directory.clone();
+    path.push(file_name);
+    path
+}
+
+fn default_extension(format: &str) -> String {
+    match format {
+        "mp4" => "mp4".to_string(),
+        "annexb" | "h264" => "h264".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn take_string(params: &mut StageParameters, key: &str) -> Option<String> {
+    params
+        .remove(key)
+        .and_then(|value| value.as_str().map(|s| s.to_string()))
 }

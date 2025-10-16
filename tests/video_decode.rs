@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::Path;
 
 use anyhow::Result;
 
@@ -45,5 +46,37 @@ fn video_decode_stage_produces_frames_from_annex_b() -> Result<()> {
         Some("H264")
     );
 
+    Ok(())
+}
+
+#[test]
+fn video_encode_stage_writes_output_file() -> Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let mut temp_file = tempfile::NamedTempFile::new()?;
+    temp_file.write_all(ANNEX_B_SAMPLE)?;
+
+    let mut artifact = Artifact::load(temp_file.path())?;
+
+    let mut registry = StageRegistry::new();
+    stages::register_defaults(&mut registry);
+    let decode = registry.create("video_decode", StageParameters::new())?;
+    let encode = registry.create("video_encode", StageParameters::new())?;
+
+    let ctx = PipelineContext {
+        output: OutputSpec {
+            directory: tempdir.path().to_path_buf(),
+            structure: "{stem}.{ext}".to_string(),
+        },
+    };
+
+    decode.run(&mut artifact, &ctx, StageDevice::Cpu)?;
+    encode.run(&mut artifact, &ctx, StageDevice::Cpu)?;
+
+    let output_path = artifact
+        .metadata
+        .get("video.output_path")
+        .and_then(|value| value.as_str())
+        .expect("output path recorded");
+    assert!(Path::new(output_path).exists());
     Ok(())
 }
